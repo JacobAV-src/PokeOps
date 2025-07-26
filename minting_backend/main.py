@@ -1,4 +1,4 @@
-from fastpi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
 import random
 import httpx
