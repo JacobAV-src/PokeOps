@@ -9,6 +9,10 @@ class MintRequest(BaseModel):
     username: str
     repo: str
 
+@app.get("/")
+def read_root():
+    return {"message": "Pokémon Minting API is running!"}
+
 @app.post("/mint-card")
 async def mint_card(data: MintRequest):
     try:
