@@ -17,6 +17,7 @@ class MintRequest(BaseModel):
 
 MINT_COOLDOWN_SECONDS = 86400  # 24 hours
 fallback_total = 19500
+DISABLE_COOLDOWN = True
 
 _cached_count = {"value": fallback_total, "last_updated": 0}
 _cache_duration = 3600
@@ -47,15 +48,16 @@ async def mint_card(data: MintRequest):
         now = time.time()
 
         # Check cooldown
-        if key in mint_history and now - mint_history[key] < MINT_COOLDOWN_SECONDS:
-            seconds_left = int(MINT_COOLDOWN_SECONDS - (now - mint_history[key]))
-            raise HTTPException(
-                status_code=429,
-                detail=f"Mint cooldown active. Try again in {seconds_left} seconds."
-            )
+        if not DISABLE_COOLDOWN:
+            if key in mint_history and now - mint_history[key] < MINT_COOLDOWN_SECONDS:
+                seconds_left = int(MINT_COOLDOWN_SECONDS - (now - mint_history[key]))
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Mint cooldown active. Try again in {seconds_left} seconds."
+                )
 
-        req_timeout = httpx.Timeout(300.0)
-        headers = {"X-Api-Key": CARD_API_KEY.strip()}
+            req_timeout = httpx.Timeout(300.0)
+            headers = {"X-Api-Key": CARD_API_KEY.strip()}
 
         async with httpx.AsyncClient(timeout=req_timeout) as client:
             print("Fetching total count from TCG API...")
