@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import os, random, httpx, time
+import os, random, httpx, time, asyncio
 
 app = FastAPI()
 
@@ -11,7 +11,7 @@ GITHUB_API = "https://api.github.com"
 mint_history = {}
 
 MINT_COOLDOWN_SECONDS = 86400  # 24 hours
-
+fallback_total = 19500
 
 class MintRequest(BaseModel):
     username: str
@@ -24,45 +24,56 @@ def read_root():
 
 @app.post("/mint-card")
 async def mint_card(data: MintRequest):
-    key = f"{data.username}/{data.repo}"
-    now = time.time()
+    try:
+        key = f"{data.username}/{data.repo}"
+        now = time.time()
 
-    # Check cooldown
-    if key in mint_history and now - mint_history[key] < MINT_COOLDOWN_SECONDS:
-        seconds_left = int(MINT_COOLDOWN_SECONDS - (now - mint_history[key]))
-        raise HTTPException(
-            status_code=429,
-            detail=f"Mint cooldown active. Try again in {seconds_left} seconds."
-        )
+        # Check cooldown
+        if key in mint_history and now - mint_history[key] < MINT_COOLDOWN_SECONDS:
+            seconds_left = int(MINT_COOLDOWN_SECONDS - (now - mint_history[key]))
+            raise HTTPException(
+                status_code=429,
+                detail=f"Mint cooldown active. Try again in {seconds_left} seconds."
+            )
 
-    req_timeout = httpx.Timeout(300.0)
-    headers = {"X-Api-Key": CARD_API_KEY.strip()}
+        req_timeout = httpx.Timeout(300.0)
+        headers = {"X-Api-Key": CARD_API_KEY.strip()}
 
-    async with httpx.AsyncClient(timeout=req_timeout) as client:
-        # Get total card count
-        print("Fetching total count from TCG API...")
-        total_count_res = await client.get("https://api.pokemontcg.io/v2/cards?pageSize=1", headers=headers)
-        print(f"Status code: {total_count_res.status_code}")
-        print(f"Response text: {total_count_res.text}")
-        if total_count_res.status_code != 200:
-            raise HTTPException(status_code=502, detail="Failed to get total card count.")
-        total_count = total_count_res.json()["totalCount"]
+        async with httpx.AsyncClient(timeout=req_timeout) as client:
+            # Get total card count
+            print("Fetching total count from TCG API...")
+            try:
+                total_count_res = await client.get("https://api.pokemontcg.io/v2/cards?pageSize=1", headers=headers)
 
-        # Randomly pick a card
-        random_page = random.randint(1, total_count)
-        card_res = await client.get(f"https://api.pokemontcg.io/v2/cards?pageSize=1&page={random_page}", headers=headers)
-        card_res.raise_for_status()
-        card_data = card_res.json()["data"][0]
+                print(f"Status code: {total_count_res.status_code}")
+                print(f"Response text: {total_count_res.text}")
 
-    # Update mint history
-    mint_history[key] = now
+                if total_count_res.status_code != 200:
+                    raise HTTPException(status_code=502, detail="Failed to get total card count.")
 
-    return {
-        "username": data.username,
-        "repo": data.repo,
-        "card": {
-            "name": card_data["name"],
-            "image": card_data["images"]["large"],
-            "id": card_data["id"]
+                total_count = total_count_res.json()["totalCount"]
+            
+            except Exception:
+                total_count = fallback_total
+
+            # Randomly pick a card
+            random_page = random.randint(1, total_count)
+            card_res = await client.get(f"https://api.pokemontcg.io/v2/cards?pageSize=1&page={random_page}", headers=headers)
+            card_res.raise_for_status()
+            card_data = card_res.json()["data"][0]
+
+        # Update mint history
+        mint_history[key] = now
+
+        return {
+            "username": data.username,
+            "repo": data.repo,
+            "card": {
+                "name": card_data["name"],
+                "image": card_data["images"]["large"],
+                "id": card_data["id"]
+            }
         }
-    }
+    except Exception as e:
+        print(f"Something went wrong while minting card : {e}")
+        raise HTTPException(status_code=500, detail="Failed to mint card.")
