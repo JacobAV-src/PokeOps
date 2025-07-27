@@ -40,7 +40,10 @@ async def mint_card(data: MintRequest):
 
     async with httpx.AsyncClient(timeout=req_timeout) as client:
         # Get total card count
+        print("Fetching total count from TCG API...")
         total_count_res = await client.get("https://api.pokemontcg.io/v2/cards?pageSize=1", headers=headers)
+        print(f"Status code: {total_count_res.status_code}")
+        print(f"Response text: {total_count_res.text}")
         if total_count_res.status_code != 200:
             raise HTTPException(status_code=502, detail="Failed to get total card count.")
         total_count = total_count_res.json()["totalCount"]
