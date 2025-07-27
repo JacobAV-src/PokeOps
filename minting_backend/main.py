@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os, random, httpx, time, asyncio
+from functools import lru_cache
 
 app = FastAPI()
 
@@ -10,12 +11,29 @@ GITHUB_API = "https://api.github.com"
 # In-memory mint history store: { "username/repo": last_mint_timestamp }
 mint_history = {}
 
-MINT_COOLDOWN_SECONDS = 86400  # 24 hours
-fallback_total = 19500
-
 class MintRequest(BaseModel):
     username: str
     repo: str
+
+MINT_COOLDOWN_SECONDS = 86400  # 24 hours
+fallback_total = 19500
+
+_cached_count = {"value": fallback_total, "last_updated": 0}
+_cache_duration = 3600
+
+
+async def get_total_card_count(client, headers):
+    now = time.time()
+    if now - _cached_count["last_updated"] < _cache_duration:
+        return _cached_count["value"]
+    try:
+        res = await client.get("https://api.pokemontcg.io/v2/cards?pageSize=1", headers=headers)
+        res.raise_for_status()
+        total = res.json()["totalCount"]
+        _cached_count.update({"value": total, "last_updated": now})
+        return total
+    except Exception:
+        return fallback_total
 
 @app.get("/")
 def read_root():
@@ -40,22 +58,9 @@ async def mint_card(data: MintRequest):
         headers = {"X-Api-Key": CARD_API_KEY.strip()}
 
         async with httpx.AsyncClient(timeout=req_timeout) as client:
-            # Get total card count
             print("Fetching total count from TCG API...")
-            try:
-                total_count_res = await client.get("https://api.pokemontcg.io/v2/cards?pageSize=1", headers=headers)
-
-                print(f"Status code: {total_count_res.status_code}")
-                print(f"Response text: {total_count_res.text}")
-
-                if total_count_res.status_code != 200:
-                    raise HTTPException(status_code=502, detail="Failed to get total card count.")
-
-                total_count = total_count_res.json()["totalCount"]
+            total_count = await get_total_card_count(client, headers)
             
-            except Exception:
-                total_count = fallback_total
-
             # Randomly pick a card
             random_page = random.randint(1, total_count)
             card_res = await client.get(f"https://api.pokemontcg.io/v2/cards?pageSize=1&page={random_page}", headers=headers)
