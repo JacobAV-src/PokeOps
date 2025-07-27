@@ -35,9 +35,10 @@ async def mint_card(data: MintRequest):
             detail=f"Mint cooldown active. Try again in {seconds_left} seconds."
         )
 
+    req_timeout = httpx.Timeout(60.0)
     headers = {"X-Api-Key": CARD_API_KEY.strip()}
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=req_timeout) as client:
         # Get total card count
         total_count_res = await client.get("https://api.pokemontcg.io/v2/cards?pageSize=1", headers=headers)
         if total_count_res.status_code != 200:
