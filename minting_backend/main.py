@@ -35,7 +35,7 @@ async def mint_card(data: MintRequest):
             detail=f"Mint cooldown active. Try again in {seconds_left} seconds."
         )
 
-    headers = {"Authorization": f"Bearer {CARD_API_KEY}"}
+    headers = {"X-Api-Key": CARD_API_KEY.strip()}
 
     async with httpx.AsyncClient() as client:
         # Get total card count
