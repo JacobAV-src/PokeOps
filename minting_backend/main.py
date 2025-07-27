@@ -35,7 +35,7 @@ async def mint_card(data: MintRequest):
             detail=f"Mint cooldown active. Try again in {seconds_left} seconds."
         )
 
-    req_timeout = httpx.Timeout(60.0)
+    req_timeout = httpx.Timeout(300.0)
     headers = {"X-Api-Key": CARD_API_KEY.strip()}
 
     async with httpx.AsyncClient(timeout=req_timeout) as client:
