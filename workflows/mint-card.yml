@@ -1,0 +1,117 @@
+name: Mint Pokémon Card
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check_if_completed_issue:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.title, '[TASK COMPLETED]')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Debug issue context
+        uses: actions/github-script@v7
+        with:
+          script: |
+            console.log("ISSUE:", context.payload.issue);
+
+      - name: "Comment: Starting mint"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.issue.number,
+                body: "⏳ Starting Pokémon card minting..."
+            });
+
+      - name: Check if issue already used
+        id: check-used
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const issue = context.payload.issue;
+
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.payload.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const alreadyMinted = comments.data.some(c => c.body.includes("✅ This issue has already been used for minting."));
+            if (alreadyMinted) {
+              core.setFailed("Issue already used for minting.");
+            }
+
+      - name: Mint the Card
+        id: mint
+        run: |
+          echo "🎉 Task completed! Minting Pokémon card..."
+
+          http_response=$(mktemp)
+          body_response=$(mktemp)
+
+          status=$(curl -s -o "$body_response" -w "%{http_code}" -X POST https://pokeops.onrender.com/mint-card \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username": "${{ github.actor }}",
+              "repo": "${{ github.repository }}"
+            }')
+
+          if [ "$status" -ne 200 ]; then
+            echo "Minting failed. HTTP $status"
+            cat "$body_response"
+            echo "status=$status" >> $GITHUB_OUTPUT
+            echo "body=$(cat $body_response)" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          card_url=$(jq -r '.card.image' "$body_response")
+          echo "CARD_URL=$card_url" >> $GITHUB_ENV
+
+      - name: Update Binder HTML
+        run: |
+          HTML_ENTRY="<img src='${{ env.CARD_URL }}' alt='Pokemon Card' width='250' style='margin:10px;'>"
+
+          mkdir -p docs
+          if [ ! -f docs/index.html ]; then
+            echo "<html><body><h1>My Pokémon Card Binder</h1><div id='cards'></div></body></html>" > docs/index.html
+          fi
+
+          sed -i "/<\/body>/i $HTML_ENTRY" docs/index.html
+
+      - name: Commit and Push Binder
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add docs/index.html
+          git commit -m "Add new card to binder"
+          git push
+
+      - name: "Comment: Mint success"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.payload.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "✅ This issue has already been used for minting."
+            })
+      - name: Lock issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.lock({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              lock_reason: "resolved"
+            });

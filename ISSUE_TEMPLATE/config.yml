@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+issue_templates:
+  - name: 🎯 Task Completed Declaration
+    description: Declare that you've completed your CI/CD tasks
+    title: "[TASK COMPLETED]"
+    labels: ["task-done"]
+    file: task-completed.md
