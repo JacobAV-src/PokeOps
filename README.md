@@ -29,11 +29,6 @@ Your binder grows. Your DevOps karma ascends.
 
 ---
 
-## 📸 **Check out My Binder!**
-
-👉 [View the Pokémon Binder](https://yourusername.github.io/your-repo-name/)
----
-
 ## 🛠️ Setup Instructions
 
 1. **Visit this repo**
